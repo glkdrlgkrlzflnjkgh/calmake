@@ -132,10 +132,50 @@ fn entry() -> anyhow::Result<()> {
         }
         Some("graph") => cmd_graph(),
         Some("build") => cmd_build(),
+        Some("clean") => {
+            let name = it.next();
+            cmd_clean(name.as_deref())
+        }
         Some(other) => anyhow::bail!("unknown command `{other}` (use `calmake`, `calmake init`, or `calmake graph` or `calmake build`)"),
         None => anyhow::bail!("no command given (use `calmake`, `calmake init`, or `calmake graph` or `calmake build`)"),
     }
 
+}
+
+
+fn cmd_clean(name: Option<&str>) -> anyhow::Result<()> {
+    let project_name = name.unwrap_or("./");
+    if project_name == "./" {
+        println!(
+            "{}[calmake]{} WARNING: cleaning current directory!{}{}",
+            color::CYAN,
+            color::RESET,
+            color::BRIGHT_YELLOW,
+            color::RESET
+        );
+    }
+    let root = Path::new(project_name);
+    if !root.exists() {
+        anyhow::bail!("directory `{project_name}` does not exist");
+    }
+
+    println!(
+        "{}[calmake]{} cleaning project `{}`",
+        color::CYAN,
+        color::RESET,
+        project_name
+    );
+    fs::remove_dir_all(root.join("bin"))?;
+    fs::remove_dir_all(root.join(".calmake"))?;
+
+    println!(
+        "{}[calmake]{} cleaned project `{}`",
+        color::CYAN,
+        color::RESET,
+        project_name
+    );
+
+    Ok(())
 }
 
 fn cmd_init(name: Option<&str>) -> anyhow::Result<()> {
@@ -332,7 +372,7 @@ fn cmd_build() -> anyhow::Result<()> {
         }
 
         if to_run.is_empty() {
-            anyhow::bail!("BUG! deadlock or cycle detected!!! (no runnable targets but not all done!!!)");
+            anyhow::bail!("BUG!!!! deadlock or cycle detected even after cycle detector!!!!! (no runnable targets but not all done!!!)");
         }
 
         rayon::scope(|s| {
@@ -664,7 +704,7 @@ impl BuildGraph {
         }
 
         if order.len() != self.targets.len() {
-            anyhow::bail!("cycle detected in dependency graph!!!");
+            anyhow::bail!("Cyclic dependency detected!");
         }
 
         Ok(order)
@@ -742,7 +782,10 @@ fn detect_compiler() -> anyhow::Result<Compiler> {
 
     anyhow::bail!(
         "no supported compiler found (tried clang++, clang, g++, cl). \
-         Install LLVM/Clang, MSVC Build Tools, or MinGW and ensure the compiler is in your PATH." 
+         Install LLVM/Clang, MSVC Build Tools, or MinGW and ensure the compiler is in your PATH. \
+         Verbose mode (-v) can be used to see which compilers were checked. \
+         Also, ensure that the compiler is callable from the command line (e.g., `clang++ --version` should work).
+         " 
     );
 }
 
