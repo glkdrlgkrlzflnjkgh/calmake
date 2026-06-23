@@ -131,8 +131,9 @@ fn entry() -> anyhow::Result<()> {
             cmd_init(name.as_deref())
         }
         Some("graph") => cmd_graph(),
-        Some(other) => anyhow::bail!("unknown command `{other}` (use `calmake`, `calmake init`, or `calmake graph`)"),
-        None => cmd_build(),
+        Some("build") => cmd_build(),
+        Some(other) => anyhow::bail!("unknown command `{other}` (use `calmake`, `calmake init`, or `calmake graph` or `calmake build`)"),
+        None => anyhow::bail!("no command given (use `calmake`, `calmake init`, or `calmake graph` or `calmake build`)"),
     }
 
 }
@@ -688,21 +689,28 @@ fn collect_sources(dir: &Path, out: &mut Vec<PathBuf>) -> anyhow::Result<()> {
 }
 
 // ---------- Compiler detection ----------
-
-#[derive(Debug, Clone)]
+///<summary>
+/// The CompilerKind enum represents the different types of compilers that can be detected.
+/// </summary>
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum CompilerKind {
     ClangCpp,
     ClangC,
     Gpp,
     Cl,
 }
-
+///<summary>
+/// The Compiler struct represents a detected compiler, including its kind and the executable name.
+/// </summary>
 #[derive(Debug, Clone)]
 struct Compiler {
     kind: CompilerKind,
     exe: String,
 }
 
+///<summary>
+/// Checks if the current operating system is Windows.
+/// </summary>
 fn is_windows() -> bool {
     cfg!(target_os = "windows")
 }
