@@ -1271,6 +1271,12 @@ fn link_target(
             }
         }
         CompilerKind::Cl => {
+            eprintln!("{}[calmake]{}{}WARNING: We are using MSCV to compile! this is not recommended!!!{}",
+            color::CYAN,
+            color::RESET,
+            color::YELLOW,
+            color::RESET
+            );
             match node.kind {
                 TargetKind::Staticlib => {
                     let mut cmd = Command::new("lib");
