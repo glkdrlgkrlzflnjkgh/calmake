@@ -306,11 +306,11 @@ fn cmd_build() -> anyhow::Result<()> {
 
     let compiler = detect_compiler()?;
     println!(
-        "{}[calmake]{} using compiler: {}{:?}{}",
+        "{}[calmake]{} using compiler: {}{}{}",
         color::CYAN,
         color::RESET,
         color::BRIGHT_GREEN,
-        compiler,
+        compiler.exe,
         color::RESET
     );
 
@@ -957,7 +957,7 @@ fn build_target(
         && output_exists
     {
         println!(
-            "{}[calmake]{} {}: {}is up to date!{} ",
+            "{}[calmake]{} {} {}is up to date!{} ",
             color::CYAN,
             color::RESET,
             name,
@@ -1135,6 +1135,12 @@ fn compile_one_source(
             let status = cmd.status()?;
             if !status.success() {
                 anyhow::bail!("compiler failed with status {status}");
+            }
+            else {
+                println!("{}[calmake]{} Finished compile!",
+                color::CYAN,
+                color::RESET
+            )
             }
         }
         CompilerKind::Cl => {
