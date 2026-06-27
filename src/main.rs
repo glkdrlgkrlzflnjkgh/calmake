@@ -8,8 +8,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use serde::{Deserialize, Serialize};
 
+use serde::{Deserialize, Serialize};
+use fuzzy_matcher::skim::SkimMatcherV2;
 mod color {
     pub const RESET: &str = "\x1b[0m";
 
