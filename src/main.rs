@@ -7,10 +7,10 @@ use std::{
     process::Command,
     sync::{Arc, Mutex},
 };
+mod util;
 
 
 use serde::{Deserialize, Serialize};
-use fuzzy_matcher::skim::SkimMatcherV2;
 mod color {
     pub const RESET: &str = "\x1b[0m";
 
@@ -39,22 +39,10 @@ fn set_verbose(v: bool) {
 }
 fn is_verbose() -> bool {
     unsafe { VERBOSE }
+    
 }
 
-fn pretty_cmd(cmd: &Command) -> String {
-    let mut s = String::new();
 
-    if let Some(program) = cmd.get_program().to_str() {
-        s.push_str(program);
-    }
-
-    for arg in cmd.get_args() {
-        s.push(' ');
-        s.push_str(&arg.to_string_lossy());
-    }
-
-    s
-}
 
 
 macro_rules! vprintln {
