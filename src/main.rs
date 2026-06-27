@@ -40,6 +40,20 @@ fn is_verbose() -> bool {
     unsafe { VERBOSE }
 }
 
+fn pretty_cmd(cmd: &Command) -> String {
+    let mut s = String::new();
+
+    if let Some(program) = cmd.get_program().to_str() {
+        s.push_str(program);
+    }
+
+    for arg in cmd.get_args() {
+        s.push(' ');
+        s.push_str(&arg.to_string_lossy());
+    }
+
+    s
+}
 
 
 macro_rules! vprintln {
@@ -116,7 +130,7 @@ fn entry() -> anyhow::Result<()> {
     if verbose {
         args.retain(|a| a != "-v" && a != "--verbose");
         println!(
-            "{}[calmake]{} {}-v or --verbose was passed! Verbose mode is now enabled!{}",
+            "{}[calmake]{} {}-v or --verbose was passed! Verbose mode is now enabled!{} (note: output will be messier!!!)",
             color::CYAN,
             color::RESET,
             color::BRIGHT_YELLOW,
@@ -136,8 +150,8 @@ fn entry() -> anyhow::Result<()> {
             let name = it.next();
             cmd_clean(name.as_deref())
         }
-        Some(other) => anyhow::bail!("unknown command `{other}` (use `calmake`, `calmake init`, or `calmake graph` or `calmake build`)"),
-        None => anyhow::bail!("no command given (use `calmake`, `calmake init`, or `calmake graph` or `calmake build`)"),
+        Some(other) => anyhow::bail!("unknown command `{other}` (use `calmake`, `calmake init`, or `calmake graph` or `calmake build` or `calmake clean`)"),
+        None => anyhow::bail!("no command given (use `calmake`, `calmake init`, or `calmake graph` or `calmake build` or `calmake clean`)"),
     }
 
 }
@@ -1088,7 +1102,11 @@ fn cached_import_lib_for(node: &TargetNode) -> PathBuf {
     }
     PathBuf::from(".calmake/cache/lib").join(base)
 }
-
+/**
+<summary>
+Does what it says on the tin: compiles a single source file.
+</summary>
+*/
 fn compile_one_source(
     compiler: &Compiler,
     node: &TargetNode,
@@ -1125,22 +1143,16 @@ fn compile_one_source(
             cmd.arg("-c").arg(src).arg("-o").arg(obj);
 
             println!(
-                "{}[calmake]{} {}compile:{} {:?}",
+                "{}[calmake]{} {}compile:{} {}",
                 color::CYAN,
                 color::RESET,
                 color::BRIGHT_BLUE,
                 color::RESET,
-                cmd
+                src.file_name().unwrap().to_string_lossy()
             );
             let status = cmd.status()?;
             if !status.success() {
                 anyhow::bail!("compiler failed with status {status}");
-            }
-            else {
-                println!("{}[calmake]{} Finished compile!",
-                color::CYAN,
-                color::RESET
-            )
             }
         }
         CompilerKind::Cl => {
@@ -1170,7 +1182,7 @@ fn compile_one_source(
                 color::RESET,
                 color::BRIGHT_BLUE,
                 color::RESET,
-                cmd
+                src.file_name().unwrap().to_string_lossy()
             );
             let status = cmd.status()?;
             if !status.success() {
