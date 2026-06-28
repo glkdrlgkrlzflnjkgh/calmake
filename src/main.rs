@@ -1,3 +1,4 @@
+// Calmake, a tiny opinionated build system.
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     env,
@@ -11,6 +12,8 @@ mod util;
 
 
 use serde::{Deserialize, Serialize};
+
+use crate::util::pretty_cmd;
 mod color {
     pub const RESET: &str = "\x1b[0m";
 
@@ -1201,12 +1204,12 @@ fn link_target(
                     }
 
                     println!(
-                        "{}[calmake]{} {}archive:{} {:?}",
+                        "{}[calmake]{} {}archive:{} {}",
                         color::CYAN,
                         color::RESET,
                         color::BRIGHT_MAGENTA,
                         color::RESET,
-                        cmd
+                        node.name
                     );
                     let status = cmd.status()?;
                     if !status.success() {
@@ -1246,12 +1249,12 @@ fn link_target(
                     }
 
                     println!(
-                        "{}[calmake]{} {}link:{} {:?}",
+                        "{}[calmake]{} {}link:{} {}",
                         color::CYAN,
                         color::RESET,
                         color::BRIGHT_MAGENTA,
                         color::RESET,
-                        cmd
+                        node.name
                     );
                     let status = cmd.status()?;
                     if !status.success() {
@@ -1295,12 +1298,12 @@ fn link_target(
                     }
 
                     println!(
-                        "{}[calmake]{} {}archive:{} {:?}",
+                        "{}[calmake]{} {}archive:{} {}",
                         color::CYAN,
                         color::RESET,
                         color::BRIGHT_MAGENTA,
                         color::RESET,
-                        cmd
+                        node.name
                     );
                     let status = cmd.status()?;
                     if !status.success() {
@@ -1347,7 +1350,7 @@ fn link_target(
                         color::RESET,
                         color::BRIGHT_MAGENTA,
                         color::RESET,
-                        cmd
+                        node.name
                     );
                     let status = cmd.status()?;
                     if !status.success() {
