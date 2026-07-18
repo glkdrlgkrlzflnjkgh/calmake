@@ -10,10 +10,12 @@ use std::{
 };
 mod util;
 
-
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use serde::{Deserialize, Serialize};
+const COMMANDS: &[&str] = &["init", "graph", "build", "clean"];
 
-use crate::util::pretty_cmd;
+
 mod color {
     pub const RESET: &str = "\x1b[0m";
 
@@ -116,6 +118,7 @@ fn main() {
 }
 
 fn entry() -> anyhow::Result<()> {
+    
     let mut args: Vec<String> = env::args().skip(1).collect();
     let verbose = args.iter().any(|a| a == "-v" || a == "--verbose");
     set_verbose(verbose);
@@ -129,7 +132,7 @@ fn entry() -> anyhow::Result<()> {
             color::RESET
         );
     }
-
+    let matcher = SkimMatcherV2::default();
     let mut it = args.into_iter();
     match it.next().as_deref() {
         Some("init") => {
@@ -142,10 +145,46 @@ fn entry() -> anyhow::Result<()> {
             let name = it.next();
             cmd_clean(name.as_deref())
         }
-        Some(other) => anyhow::bail!("unknown command `{other}` (use `calmake`, `calmake init`, or `calmake graph` or `calmake build` or `calmake clean`)"),
+        Some(other) => {
+            // Find best fuzzy match
+            let mut best: Option<(&str, i64)> = None;
+
+            for &cmd in COMMANDS {
+                if verbose {
+                    vprintln!("Matching for: {}",
+                        cmd
+                    );
+                }
+                if let Some(score) = matcher.fuzzy_match(cmd, other) {
+                    if verbose {
+                        vprintln!("score for {} is {}", 
+                            cmd,
+                            score
+                        );
+                    }
+                    match best {
+                        None => best = Some((cmd, score)),
+                        Some((_, best_score)) if score > best_score => {
+                            best = Some((cmd, score));
+                        }
+
+                        _ => {}
+                    }
+                }
+            }
+
+            if let Some((suggestion, _)) = best {
+                anyhow::bail!(
+                    "unknown command `{other}` — did you mean `{suggestion}`?"
+                );
+            } else {
+                anyhow::bail!(
+                    "unknown command `{other}` (valid commands: init, graph, build, clean)"
+                );
+            }
+        }
         None => anyhow::bail!("no command given (use `calmake`, `calmake init`, or `calmake graph` or `calmake build` or `calmake clean`)"),
     }
-
 }
 
 
