@@ -514,8 +514,11 @@ struct BuildConfig {
 
 #[derive(Debug, Clone)]
 struct ParseDiagnostic {
+    code: &'static str,
     line: usize,
     column: usize,
+    end_column: usize,
+    source: String,
     message: String,
 }
 
@@ -526,15 +529,35 @@ struct ParseErrors {
 
 impl fmt::Display for ParseErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "build.cal contains {} error(s)!", self.diagnostics.len())?;
+        writeln!(
+            f,
+            "error: build.cal contains {} error(s)",
+            self.diagnostics.len()
+        )?;
         for diagnostic in &self.diagnostics {
+            let underline = format!(
+                "{}{}",
+                " ".repeat(diagnostic.column.saturating_sub(1)),
+                "^".repeat(
+                    diagnostic
+                        .end_column
+                        .saturating_sub(diagnostic.column)
+                        .max(1)
+                )
+            );
             writeln!(
                 f,
-                "  line {}, column {}: {}",
-                diagnostic.line, diagnostic.column, diagnostic.message
+                "\nerror[{}]: {}\n  --> build.cal:{}:{}\n   |\n{:>2} | {}\n   | {}",
+                diagnostic.code,
+                diagnostic.message,
+                diagnostic.line,
+                diagnostic.column,
+                diagnostic.line,
+                diagnostic.source,
+                underline
             )?;
         }
-        Ok(()) // How is this okay???
+        Ok(())
     }
 }
 
@@ -548,10 +571,14 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
 
     let report =
         |diagnostics: &mut Vec<ParseDiagnostic>, line: usize, raw: &str, message: String| {
-            let column = raw.len() - raw.trim_start().len() + 1;
+            let (start, end) = diagnostic_span(raw, &message);
+            let code = diagnostic_code(&message);
             diagnostics.push(ParseDiagnostic {
+                code,
                 line,
-                column,
+                column: start + 1,
+                end_column: end + 1,
+                source: raw.to_string(),
                 message,
             });
         };
@@ -773,6 +800,61 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
     }
 
     Ok(BuildConfig { targets })
+}
+
+fn diagnostic_code(message: &str) -> &'static str {
+    if message.starts_with("invalid kind") {
+        "E001"
+    } else if message.starts_with("invalid language") {
+        "E002"
+    } else if message.starts_with("unknown key") {
+        "E003"
+    } else if message.starts_with("duplicate target") {
+        "E004"
+    } else if message.starts_with("missing") || message.contains("missing `") {
+        "E005"
+    } else if message.starts_with("stray") || message.starts_with("unexpected") {
+        "E006"
+    } else if message.starts_with("unterminated") {
+        "E007"
+    } else if message.starts_with("expected") {
+        "E008"
+    } else {
+        "E000"
+    }
+}
+
+fn diagnostic_span(source: &str, message: &str) -> (usize, usize) {
+    let indent = source.len() - source.trim_start().len();
+    let fallback = (indent, (indent + 1).min(source.len()));
+
+    if message.starts_with("invalid kind") || message.starts_with("invalid language") {
+        if let Some(equal) = source.find('=') {
+            let value = &source[equal + 1..];
+            let start = equal + 1 + value.len() - value.trim_start().len();
+            let end = source.trim_end().len();
+            return (start, end.max(start + 1));
+        }
+    }
+
+    if message.starts_with("unknown key") {
+        if let Some(equal) = source.find('=') {
+            let key = &source[..equal];
+            let start = key.len() - key.trim_start().len();
+            let end = key.trim_end().len();
+            return (start, end.max(start + 1));
+        }
+    }
+
+    if message.starts_with("duplicate target") {
+        if let Some(name) = message.split('`').nth(1) {
+            if let Some(start) = source.find(name) {
+                return (start, start + name.len());
+            }
+        }
+    }
+
+    fallback
 }
 
 fn trim_string(v: &str) -> String {
@@ -1769,7 +1851,7 @@ target app {
         assert!(
             message
                 .lines()
-                .filter(|line| line.starts_with("  line "))
+                .filter(|line| line.starts_with("error["))
                 .count()
                 >= 5
         );

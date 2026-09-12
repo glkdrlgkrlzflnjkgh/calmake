@@ -24,11 +24,11 @@ function calmakeTask(command) {
   );
   task.presentationOptions = {
     reveal: vscode.TaskRevealKind.Always,
-    panel: vscode.TaskPanelKind.Shared,
-    clear: false,
+    panel: vscode.TaskPanelKind.Dedicated,
+    clear: true,
     close: false,
     focus: false,
-    showReuseMessage: true,
+    showReuseMessage: false,
   };
   task.detail = `Run calmake ${command} in the integrated terminal`;
   return task;
@@ -51,12 +51,18 @@ function diagnosticsFor(document, collection) {
   let target = undefined;
   const knownProperties = new Set(['kind', 'language', 'sources', 'deps', 'output', 'cflags', 'cppflags', 'ldflags']);
   const targetNames = new Set();
-  const addDiagnostic = (index, text, message, severity = vscode.DiagnosticSeverity.Error, start = 0) => {
-    diagnostics.push(new vscode.Diagnostic(
-      new vscode.Range(index, start, index, Math.max(start + 1, text.length)),
+  const addDiagnostic = (index, text, message, severity = vscode.DiagnosticSeverity.Error, start = 0, end = text.length, code) => {
+    const diagnostic = new vscode.Diagnostic(
+      new vscode.Range(index, start, index, Math.max(start + 1, end)),
       message,
       severity,
-    ));
+    );
+    if (code) diagnostic.code = code;
+    diagnostics.push(diagnostic);
+  };
+  const span = (text, value) => {
+    const start = text.indexOf(value);
+    return start < 0 ? [0, text.length] : [start, start + value.length];
   };
   const closeTarget = (index, text) => {
     if (!target) return;
@@ -75,15 +81,16 @@ function diagnosticsFor(document, collection) {
         return;
       }
       if (!line.endsWith('{')) {
-        addDiagnostic(index, text, 'Target declaration must end with `{`.');
+        addDiagnostic(index, text, 'Target declaration must end with `{`.', vscode.DiagnosticSeverity.Error, 0, text.length, 'E008');
         return;
       }
       const name = line.slice('target '.length, -1).trim();
       if (!name) {
-        addDiagnostic(index, text, 'Target name is required.');
+        addDiagnostic(index, text, 'Target name is required.', vscode.DiagnosticSeverity.Error, text.indexOf('target') + 7, text.length, 'E005');
         return;
       }
-      if (targetNames.has(name)) addDiagnostic(index, text, `Duplicate target '${name}'.`);
+      const [nameStart, nameEnd] = span(text, name);
+      if (targetNames.has(name)) addDiagnostic(index, text, `Duplicate target '${name}'.`, vscode.DiagnosticSeverity.Error, nameStart, nameEnd, 'E004');
       targetNames.add(name);
       target = { name, properties: new Set() };
       return;
@@ -108,33 +115,35 @@ function diagnosticsFor(document, collection) {
     const key = line.slice(0, equals).trim();
     const value = line.slice(equals + 1).trim();
     if (!key) {
-      addDiagnostic(index, text, 'Property name is required.');
+      addDiagnostic(index, text, 'Property name is required.', vscode.DiagnosticSeverity.Error, 0, Math.max(1, equals), 'E005');
       return;
     }
     if (!value) {
-      addDiagnostic(index, text, `Property '${key}' requires a value.`);
+      addDiagnostic(index, text, `Property '${key}' requires a value.`, vscode.DiagnosticSeverity.Error, text.indexOf('=') + 1, text.length, 'E005');
       return;
     }
+    const [keyStart, keyEnd] = span(text, key);
+    const [valueStart, valueEnd] = span(text, value);
     if (!knownProperties.has(key)) {
-      addDiagnostic(index, text, `Unknown property '${key}'.`);
+      addDiagnostic(index, text, `Unknown property '${key}'.`, vscode.DiagnosticSeverity.Error, keyStart, keyEnd, 'E003');
       return;
     }
     if (target.properties.has(key)) {
-      addDiagnostic(index, text, `Property '${key}' is duplicated in target '${target.name}'.`);
+      addDiagnostic(index, text, `Property '${key}' is duplicated in target '${target.name}'.`, vscode.DiagnosticSeverity.Error, keyStart, keyEnd, 'E003');
     }
     target.properties.add(key);
 
     if (key === 'kind' && !['exe', 'staticlib', 'sharedlib'].includes(value.replace(/^"|"$/g, ''))) {
-      addDiagnostic(index, text, `Invalid kind '${value}'. Expected exe, staticlib, or sharedlib.`);
+      addDiagnostic(index, text, `Invalid kind '${value}'. Expected exe, staticlib, or sharedlib.`, vscode.DiagnosticSeverity.Error, valueStart, valueEnd, 'E001');
     }
     if (key === 'language' && !['c', 'cpp'].includes(value.replace(/^"|"$/g, ''))) {
-      addDiagnostic(index, text, `Invalid language '${value}'. Expected c or cpp.`);
+      addDiagnostic(index, text, `Invalid language '${value}'. Expected c or cpp.`, vscode.DiagnosticSeverity.Error, valueStart, valueEnd, 'E002');
     }
     if (value.startsWith('"') !== value.endsWith('"')) {
-      addDiagnostic(index, text, 'Unterminated quoted value.');
+      addDiagnostic(index, text, 'Unterminated quoted value.', vscode.DiagnosticSeverity.Error, valueStart, valueEnd, 'E008');
     }
     if (value.startsWith('[') !== value.endsWith(']')) {
-      addDiagnostic(index, text, 'List values must be enclosed in `[` and `]`.');
+      addDiagnostic(index, text, 'List values must be enclosed in `[` and `]`.', vscode.DiagnosticSeverity.Error, valueStart, valueEnd, 'E008');
     }
   });
 

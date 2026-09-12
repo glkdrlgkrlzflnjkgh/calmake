@@ -77,7 +77,7 @@
         "calmake.executable": {
           "type": "string",
           "default": "calmake",
-          "description": "Path to the calmake executable."
+          "description": "Path to the calmake executable. If not set, the extension will break."
         },
         "calmake.autoGenerateCompileCommands": {
           "type": "boolean",
