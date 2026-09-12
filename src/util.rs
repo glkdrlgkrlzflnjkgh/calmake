@@ -1,6 +1,6 @@
 use crate::Command;
 
-pub fn comparenums(a:i32, b:i32) -> anyhow::Result<bool> {
+pub fn comparenums(a: i32, b: i32) -> anyhow::Result<bool> {
     return Ok(a == b);
 }
 pub fn pretty_cmd(cmd: &Command) -> String {

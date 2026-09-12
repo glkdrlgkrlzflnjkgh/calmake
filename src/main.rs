@@ -1,7 +1,7 @@
 // Calmake, a tiny opinionated build system.
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    env,
+    env, fmt,
     fs::{self, File},
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
@@ -10,11 +10,10 @@ use std::{
 };
 mod util;
 
-use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 use serde::{Deserialize, Serialize};
-const COMMANDS: &[&str] = &["init", "graph", "build", "compdb", "clean"];
-
+const COMMANDS: &[&str] = &["init", "graph", "build", "check", "compdb", "clean"];
 
 mod color {
     pub const RESET: &str = "\x1b[0m";
@@ -44,11 +43,7 @@ fn set_verbose(v: bool) {
 }
 fn is_verbose() -> bool {
     unsafe { VERBOSE }
-    
 }
-
-
-
 
 macro_rules! vprintln {
     ($($arg:tt)*) => {
@@ -75,7 +70,6 @@ macro_rules! erprintln {
         }
     };
 }
-
 
 fn cmd_graph() -> anyhow::Result<()> {
     let config_path = Path::new("build.cal");
@@ -125,20 +119,30 @@ fn cmd_compdb() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn cmd_check() -> anyhow::Result<()> {
+    let config_path = Path::new("build.cal");
+    if !config_path.exists() {
+        anyhow::bail!("build.cal not found in current directory");
+    }
+
+    let config_str = fs::read_to_string(config_path)?;
+    parse_config(&config_str)?;
+    println!(
+        "{}[calmake]{} build.cal is valid",
+        color::CYAN,
+        color::RESET
+    );
+    Ok(())
+}
 
 fn main() {
     if let Err(e) = entry() {
-        eprintln!(
-            "{}[calmake] error:{} {e}",
-            color::BRIGHT_RED,
-            color::RESET
-        );
+        eprintln!("{}[calmake] error:{} {e}", color::BRIGHT_RED, color::RESET);
         std::process::exit(1);
     }
 }
 
 fn entry() -> anyhow::Result<()> {
-    
     let mut args: Vec<String> = env::args().skip(1).collect();
     let verbose = args.iter().any(|a| a == "-v" || a == "--verbose");
     set_verbose(verbose);
@@ -161,6 +165,7 @@ fn entry() -> anyhow::Result<()> {
         }
         Some("graph") => cmd_graph(),
         Some("build") => cmd_build(),
+        Some("check") => cmd_check(),
         Some("compdb") | Some("compile_commands") => cmd_compdb(),
         Some("clean") => {
             let name = it.next();
@@ -172,16 +177,11 @@ fn entry() -> anyhow::Result<()> {
 
             for &cmd in COMMANDS {
                 if verbose {
-                    vprintln!("Matching for: {}",
-                        cmd
-                    );
+                    vprintln!("Matching for: {}", cmd);
                 }
                 if let Some(score) = matcher.fuzzy_match(cmd, other) {
                     if verbose {
-                        vprintln!("score for {} is {}", 
-                            cmd,
-                            score
-                        );
+                        vprintln!("score for {} is {}", cmd, score);
                     }
                     match best {
                         None => best = Some((cmd, score)),
@@ -195,19 +195,18 @@ fn entry() -> anyhow::Result<()> {
             }
 
             if let Some((suggestion, _)) = best {
-                anyhow::bail!(
-                    "unknown command `{other}` — did you mean `{suggestion}`?"
-                );
+                anyhow::bail!("unknown command `{other}` — did you mean `{suggestion}`?");
             } else {
                 anyhow::bail!(
-                    "unknown command `{other}` (valid commands: init, graph, build, compdb, clean)"
+                    "unknown command `{other}` (valid commands: init, graph, build, check, compdb, clean)"
                 );
             }
         }
-        None => anyhow::bail!("no command given (use `calmake`, `calmake init`, or `calmake graph` or `calmake build` or `calmake clean`)"),
+        None => anyhow::bail!(
+            "no command given (use `calmake`, `calmake init`, `calmake graph`, `calmake build`, `calmake check`, `calmake compdb`, or `calmake clean`)"
+        ),
     }
 }
-
 
 fn cmd_clean(name: Option<&str>) -> anyhow::Result<()> {
     let project_name = name.unwrap_or("./");
@@ -338,11 +337,7 @@ void libcallum_hello() {
     fs::write(root.join("libcallum").join("libcallum.hpp"), lib_hpp)?;
     fs::write(root.join("libcallum").join("libcallum.cpp"), lib_cpp)?;
 
-    println!(
-        "{}[calmake]{} created:",
-        color::CYAN,
-        color::RESET
-    );
+    println!("{}[calmake]{} created:", color::CYAN, color::RESET);
     println!("  {project_name}/build.cal");
     println!("  {project_name}/src/main.cpp");
     println!("  {project_name}/libcallum/libcallum.hpp");
@@ -358,7 +353,9 @@ void libcallum_hello() {
 fn cmd_build() -> anyhow::Result<()> {
     let config_path = Path::new("build.cal");
     if !config_path.exists() {
-        anyhow::bail!("build.cal not found in current directory (run `calmake init <name>` to create one)");
+        anyhow::bail!(
+            "build.cal not found in current directory (run `calmake init <name>` to create one)"
+        );
     }
 
     fs::create_dir_all(".calmake/cache/obj")?;
@@ -439,7 +436,9 @@ fn cmd_build() -> anyhow::Result<()> {
         }
 
         if to_run.is_empty() {
-            anyhow::bail!("BUG!!!! deadlock or cycle detected even after cycle detector!!!!! (no runnable targets but not all done!!!)");
+            anyhow::bail!(
+                "BUG!!!! deadlock or cycle detected even after cycle detector!!!!! (no runnable targets but not all done!!!)"
+            );
         }
 
         rayon::scope(|s| {
@@ -513,10 +512,49 @@ struct BuildConfig {
     targets: HashMap<String, TargetConfig>,
 }
 
+#[derive(Debug, Clone)]
+struct ParseDiagnostic {
+    line: usize,
+    column: usize,
+    message: String,
+}
+
+#[derive(Debug)]
+struct ParseErrors {
+    diagnostics: Vec<ParseDiagnostic>,
+}
+
+impl fmt::Display for ParseErrors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "build.cal contains {} error(s):", self.diagnostics.len())?;
+        for diagnostic in &self.diagnostics {
+            writeln!(
+                f,
+                "  line {}, column {}: {}",
+                diagnostic.line, diagnostic.column, diagnostic.message
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ParseErrors {}
+
 fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
     let mut targets = HashMap::new();
     let mut current_name: Option<String> = None;
     let mut current: Option<TargetConfig> = None;
+    let mut diagnostics = Vec::new();
+
+    let report =
+        |diagnostics: &mut Vec<ParseDiagnostic>, line: usize, raw: &str, message: String| {
+            let column = raw.len() - raw.trim_start().len() + 1;
+            diagnostics.push(ParseDiagnostic {
+                line,
+                column,
+                message,
+            });
+        };
 
     for (lineno, raw_line) in src.lines().enumerate() {
         let line_no = lineno + 1;
@@ -527,11 +565,23 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
 
         if line.starts_with("target ") && line.ends_with('{') {
             if current.is_some() {
-                anyhow::bail!("line {line_no}: nested target not allowed");
+                report(
+                    &mut diagnostics,
+                    line_no,
+                    raw_line,
+                    "nested target not allowed".into(),
+                );
+                continue;
             }
             let inner = &line["target ".len()..line.len() - 1].trim();
             if inner.is_empty() {
-                anyhow::bail!("line {line_no}: target name missing");
+                report(
+                    &mut diagnostics,
+                    line_no,
+                    raw_line,
+                    "target name missing".into(),
+                );
+                continue;
             }
             current_name = Some(inner.to_string());
             current = Some(TargetConfig {
@@ -547,33 +597,94 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
             continue;
         }
 
+        if line.starts_with("target ") {
+            report(
+                &mut diagnostics,
+                line_no,
+                raw_line,
+                "target declaration must end with `{`".into(),
+            );
+            continue;
+        }
+
         if line == "}" {
             if let (Some(name), Some(cfg)) = (current_name.take(), current.take()) {
                 vprintln!("parsed target {name}: {:?}", cfg);
                 if cfg.output.is_empty() {
-                    anyhow::bail!("target `{name}` missing `output`");
+                    report(
+                        &mut diagnostics,
+                        line_no,
+                        raw_line,
+                        format!("target `{name}` missing `output`"),
+                    );
                 }
                 if cfg.sources.is_empty() {
-                    anyhow::bail!("target `{name}` has no `sources`");
+                    report(
+                        &mut diagnostics,
+                        line_no,
+                        raw_line,
+                        format!("target `{name}` has no `sources`"),
+                    );
                 }
-                targets.insert(name, cfg);
+                if targets.contains_key(&name) {
+                    report(
+                        &mut diagnostics,
+                        line_no,
+                        raw_line,
+                        format!("duplicate target `{name}`"),
+                    );
+                } else {
+                    targets.insert(name, cfg);
+                }
             } else {
-                anyhow::bail!("line {line_no}: stray `}}`");
+                report(&mut diagnostics, line_no, raw_line, "stray `}`".into());
             }
             continue;
         }
 
         let (name, cfg) = match (&current_name, &mut current) {
             (Some(n), Some(c)) => (n.clone(), c),
-            _ => anyhow::bail!("line {line_no}: key outside of target block"),
+            _ => {
+                report(
+                    &mut diagnostics,
+                    line_no,
+                    raw_line,
+                    "property is outside of a target block".into(),
+                );
+                continue;
+            }
         };
 
         let parts: Vec<&str> = line.splitn(2, '=').collect();
         if parts.len() != 2 {
-            anyhow::bail!("line {line_no}: expected `key = value`");
+            report(
+                &mut diagnostics,
+                line_no,
+                raw_line,
+                "expected `key = value`".into(),
+            );
+            continue;
         }
         let key = parts[0].trim();
         let value = parts[1].trim();
+        if key.is_empty() {
+            report(
+                &mut diagnostics,
+                line_no,
+                raw_line,
+                "property name is missing".into(),
+            );
+            continue;
+        }
+        if value.is_empty() {
+            report(
+                &mut diagnostics,
+                line_no,
+                raw_line,
+                format!("property `{key}` has no value"),
+            );
+            continue;
+        }
 
         match key {
             "kind" => {
@@ -582,7 +693,17 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
                     "exe" => TargetKind::Exe,
                     "staticlib" => TargetKind::Staticlib,
                     "sharedlib" => TargetKind::Sharedlib,
-                    other => anyhow::bail!("line {line_no}: invalid kind `{other}`"),
+                    other => {
+                        report(
+                            &mut diagnostics,
+                            line_no,
+                            raw_line,
+                            format!(
+                                "invalid kind `{other}`; expected `exe`, `staticlib`, or `sharedlib`"
+                            ),
+                        );
+                        continue;
+                    }
                 };
             }
             "language" => {
@@ -590,7 +711,15 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
                 cfg.language = match val.as_str() {
                     "c" => Language::C,
                     "cpp" => Language::Cpp,
-                    other => anyhow::bail!("line {line_no}: invalid language `{other}`"),
+                    other => {
+                        report(
+                            &mut diagnostics,
+                            line_no,
+                            raw_line,
+                            format!("invalid language `{other}`; expected `c` or `cpp`"),
+                        );
+                        continue;
+                    }
                 };
             }
             "sources" => {
@@ -612,16 +741,35 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
                 cfg.ldflags = parse_list_or_word(value);
             }
             other => {
-                anyhow::bail!("line {line_no}: unknown key `{other}` in target `{name}`");
+                report(
+                    &mut diagnostics,
+                    line_no,
+                    raw_line,
+                    format!("unknown key `{other}` in target `{name}`"),
+                );
             }
         }
     }
 
     if current.is_some() || current_name.is_some() {
-        anyhow::bail!("unterminated target block");
+        report(
+            &mut diagnostics,
+            src.lines().count().max(1),
+            src.lines().last().unwrap_or_default(),
+            "unterminated target block".into(),
+        );
     }
     if targets.is_empty() {
-        anyhow::bail!("no targets defined in build.cal");
+        report(
+            &mut diagnostics,
+            1,
+            src.lines().next().unwrap_or_default(),
+            "no valid targets defined in build.cal".into(),
+        );
+    }
+
+    if !diagnostics.is_empty() {
+        return Err(ParseErrors { diagnostics }.into());
     }
 
     Ok(BuildConfig { targets })
@@ -653,10 +801,7 @@ fn parse_list(v: &str) -> Vec<String> {
     if inner.is_empty() {
         return Vec::new();
     }
-    inner
-        .split(',')
-        .map(|s| trim_string(s.trim()))
-        .collect()
+    inner.split(',').map(|s| trim_string(s.trim())).collect()
 }
 
 // ---------- Graph ----------
@@ -726,11 +871,17 @@ impl BuildGraph {
         let mut reverse_deps: HashMap<String, Vec<String>> = HashMap::new();
         for (name, node) in &targets {
             for d in &node.deps {
-                reverse_deps.entry(d.clone()).or_default().push(name.clone());
+                reverse_deps
+                    .entry(d.clone())
+                    .or_default()
+                    .push(name.clone());
             }
         }
 
-        Ok(Self { targets, reverse_deps })
+        Ok(Self {
+            targets,
+            reverse_deps,
+        })
     }
 
     fn root_targets(&self) -> Vec<String> {
@@ -918,9 +1069,7 @@ impl BuildCache {
     }
 
     fn save(&self, path: &str) -> anyhow::Result<()> {
-        vprintln!("Saving buildcache to '{}'!",
-            path
-        );
+        vprintln!("Saving buildcache to '{}'!", path);
         let s = serde_json::to_string_pretty(self)?;
         let mut f = File::create(path)?;
         f.write_all(s.as_bytes())?;
@@ -1026,10 +1175,7 @@ fn build_target(
 
     let output_exists = node.output.exists();
 
-    if !any_source_changed
-        && old_target_cache.target_hash == meta_hash
-        && output_exists
-    {
+    if !any_source_changed && old_target_cache.target_hash == meta_hash && output_exists {
         println!(
             "{}[calmake]{} {} {}is up to date!{} ",
             color::CYAN,
@@ -1038,14 +1184,16 @@ fn build_target(
             color::BRIGHT_GREEN,
             color::RESET
         );
-        cache_guard.targets.insert(name.to_string(), new_target_cache);
+        cache_guard
+            .targets
+            .insert(name.to_string(), new_target_cache);
         return Ok(());
     }
-    println!("{}[calmake]{} {} needs to be rebuilt!",
+    println!(
+        "{}[calmake]{} {} needs to be rebuilt!",
         color::CYAN,
         color::RESET,
         name
-
     );
 
     if let Some(parent) = node.output.parent() {
@@ -1114,13 +1262,17 @@ fn build_target(
             color::BRIGHT_GREEN,
             color::RESET
         );
-        cache_guard.targets.insert(name.to_string(), new_target_cache);
+        cache_guard
+            .targets
+            .insert(name.to_string(), new_target_cache);
         return Ok(());
     }
 
     link_target(compiler, node, &objects, &graph.targets)?;
 
-    cache_guard.targets.insert(name.to_string(), new_target_cache);
+    cache_guard
+        .targets
+        .insert(name.to_string(), new_target_cache);
 
     Ok(())
 }
@@ -1275,99 +1427,98 @@ fn link_target(
     all_targets: &HashMap<String, TargetNode>,
 ) -> anyhow::Result<()> {
     match compiler.kind {
-        CompilerKind::ClangCpp | CompilerKind::Gpp | CompilerKind::ClangC => {
-            match node.kind {
-                TargetKind::Staticlib => {
-                    let mut cmd = Command::new("llvm-ar");
-                    cmd.arg("rcs");
-                    cmd.arg(&node.output);
-                    for obj in objects {
-                        cmd.arg(obj);
-                    }
+        CompilerKind::ClangCpp | CompilerKind::Gpp | CompilerKind::ClangC => match node.kind {
+            TargetKind::Staticlib => {
+                let mut cmd = Command::new("llvm-ar");
+                cmd.arg("rcs");
+                cmd.arg(&node.output);
+                for obj in objects {
+                    cmd.arg(obj);
+                }
 
-                    println!(
-                        "{}[calmake]{} {}archive:{} {}",
-                        color::CYAN,
-                        color::RESET,
-                        color::BRIGHT_MAGENTA,
-                        color::RESET,
-                        node.name
-                    );
-                    let status = cmd.status()?;
-                    if !status.success() {
-                        anyhow::bail!("llvm-ar failed with status {status}");
+                println!(
+                    "{}[calmake]{} {}archive:{} {}",
+                    color::CYAN,
+                    color::RESET,
+                    color::BRIGHT_MAGENTA,
+                    color::RESET,
+                    node.name
+                );
+                let status = cmd.status()?;
+                if !status.success() {
+                    anyhow::bail!("llvm-ar failed with status {status}");
+                }
+            }
+            _ => {
+                let mut cmd = Command::new(&compiler.exe);
+
+                for obj in objects {
+                    cmd.arg(obj);
+                }
+
+                for dep in &node.deps {
+                    let dep_node = all_targets.get(dep).unwrap();
+                    if dep_node.kind == TargetKind::Sharedlib && is_windows() {
+                        let cached_lib = cached_import_lib_for(dep_node);
+                        cmd.arg(&cached_lib);
+                    } else {
+                        cmd.arg(&dep_node.output);
                     }
                 }
-                _ => {
-                    let mut cmd = Command::new(&compiler.exe);
 
-                    for obj in objects {
-                        cmd.arg(obj);
+                for flag in &node.ldflags {
+                    cmd.arg(flag);
+                }
+
+                match node.kind {
+                    TargetKind::Exe => {
+                        cmd.arg("-o").arg(&node.output);
                     }
-
-                    for dep in &node.deps {
-                        let dep_node = all_targets.get(dep).unwrap();
-                        if dep_node.kind == TargetKind::Sharedlib && is_windows() {
-                            let cached_lib = cached_import_lib_for(dep_node);
-                            cmd.arg(&cached_lib);
-                        } else {
-                            cmd.arg(&dep_node.output);
-                        }
-                    }
-
-                    for flag in &node.ldflags {
-                        cmd.arg(flag);
-                    }
-
-                    match node.kind {
-                        TargetKind::Exe => {
-                            cmd.arg("-o").arg(&node.output);
-                        }
-                        TargetKind::Sharedlib => {
-                            let dll_path = node.output.to_string_lossy().to_string();
-                            cmd.arg("-shared").arg("-o").arg(&dll_path);
-                        }
-                        TargetKind::Staticlib => unreachable!(),
-                    }
-
-                    println!(
-                        "{}[calmake]{} {}link:{} {}",
-                        color::CYAN,
-                        color::RESET,
-                        color::BRIGHT_MAGENTA,
-                        color::RESET,
-                        node.name
-                    );
-                    let status = cmd.status()?;
-                    if !status.success() {
-                        anyhow::bail!("link failed with status {status}");
-                    }
-
-                    if node.kind == TargetKind::Sharedlib && is_windows() {
+                    TargetKind::Sharedlib => {
                         let dll_path = node.output.to_string_lossy().to_string();
-                        let default_lib = dll_path.replace(".dll", ".lib");
-                        let default_lib_path = PathBuf::from(&default_lib);
-                        let cached_lib = cached_import_lib_for(node);
+                        cmd.arg("-shared").arg("-o").arg(&dll_path);
+                    }
+                    TargetKind::Staticlib => unreachable!(),
+                }
 
-                        if default_lib_path.exists() {
-                            fs::create_dir_all(cached_lib.parent().unwrap())?;
-                            fs::copy(&default_lib_path, &cached_lib)?;
-                            vprintln!(
-                                "cached import lib {:?} -> {:?}",
-                                default_lib_path,
-                                cached_lib
-                            );
-                        }
+                println!(
+                    "{}[calmake]{} {}link:{} {}",
+                    color::CYAN,
+                    color::RESET,
+                    color::BRIGHT_MAGENTA,
+                    color::RESET,
+                    node.name
+                );
+                let status = cmd.status()?;
+                if !status.success() {
+                    anyhow::bail!("link failed with status {status}");
+                }
+
+                if node.kind == TargetKind::Sharedlib && is_windows() {
+                    let dll_path = node.output.to_string_lossy().to_string();
+                    let default_lib = dll_path.replace(".dll", ".lib");
+                    let default_lib_path = PathBuf::from(&default_lib);
+                    let cached_lib = cached_import_lib_for(node);
+
+                    if default_lib_path.exists() {
+                        fs::create_dir_all(cached_lib.parent().unwrap())?;
+                        fs::copy(&default_lib_path, &cached_lib)?;
+                        vprintln!(
+                            "cached import lib {:?} -> {:?}",
+                            default_lib_path,
+                            cached_lib
+                        );
                     }
                 }
             }
-        }
+        },
         CompilerKind::Cl => {
-            eprintln!("{}[calmake]{}{}WARNING: We are using MSCV to compile! this is not recommended!!!{}",
-            color::CYAN,
-            color::RESET,
-            color::YELLOW,
-            color::RESET
+            eprintln!(
+                "{}[calmake]{}{}WARNING: We are using MSCV to compile! this is not recommended!!!{}",
+                color::CYAN,
+                color::RESET,
+                color::YELLOW,
+                color::RESET
             );
             match node.kind {
                 TargetKind::Staticlib => {
@@ -1512,8 +1663,7 @@ fn parse_depfile(path: &Path) -> anyhow::Result<Vec<PathBuf>> {
 }
 
 fn hash_file(path: &Path) -> anyhow::Result<blake3::Hash> {
-    let mut f = File::open(path)
-        .map_err(|e| anyhow::anyhow!("failed to open {:?}: {e}", path))?;
+    let mut f = File::open(path).map_err(|e| anyhow::anyhow!("failed to open {:?}: {e}", path))?;
     let mut hasher = blake3::Hasher::new();
     let mut buf = [0u8; 8192];
     loop {
@@ -1585,5 +1735,43 @@ fn normalize(root: &Path, p: &Path) -> PathBuf {
         p.to_path_buf()
     } else {
         root.join(p.file_name().unwrap_or_default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_config;
+
+    #[test]
+    fn parser_reports_multiple_errors() {
+        let source = r#"
+target app {
+    kind = mystery
+    language = rust
+    mystery = value
+}
+
+target app {
+    sources = ["src"]
+}
+
+}
+"#;
+
+        let error = parse_config(source).expect_err("invalid config should fail");
+        let message = error.to_string();
+
+        assert!(message.contains("invalid kind `mystery`"));
+        assert!(message.contains("invalid language `rust`"));
+        assert!(message.contains("unknown key `mystery`"));
+        assert!(message.contains("duplicate target `app`"));
+        assert!(message.contains("stray `}`"));
+        assert!(
+            message
+                .lines()
+                .filter(|line| line.starts_with("  line "))
+                .count()
+                >= 5
+        );
     }
 }
