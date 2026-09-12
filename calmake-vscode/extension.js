@@ -6,7 +6,7 @@ function workspaceRoot() {
 }
 
 function executable() {
-  return vscode.workspace.getConfiguration('calmake').get('executable', 'calmake');
+  return vscode.workspace.getConfiguration('calmake').get('executable', 'calmake') || null;
 }
 
 function calmakeTask(command) {
@@ -14,6 +14,10 @@ function calmakeTask(command) {
   if (!root) return undefined;
 
   const definition = { type: 'calmake', command };
+  if (executable() === null) {
+    console.error('Calmake: Executable path is not set. Please configure "calmake.executable" in your settings.');
+    return undefined;
+  }
   const execution = new vscode.ShellExecution(executable(), [command]);
   const task = new vscode.Task(
     definition,
@@ -46,7 +50,7 @@ function isCalmakeTask(task, command) {
 
 function diagnosticsFor(document, collection) {
   if (document.languageId !== 'calmake') {
-    window.showWarningMessage(`Calmake: Ignoring ${document.fileName} because it is not a Calmake file.`);
+    console.info(`Calmake: Ignoring ${document.fileName} because it is not a Calmake file.`);
     return;
   }
   const diagnostics = [];

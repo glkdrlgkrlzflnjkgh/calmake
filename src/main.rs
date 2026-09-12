@@ -568,8 +568,8 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
     let mut current_name: Option<String> = None;
     let mut current: Option<TargetConfig> = None;
     let mut diagnostics = Vec::new();
-
-    let report =
+    let mut error_count = 0;
+    let mut report =
         |diagnostics: &mut Vec<ParseDiagnostic>, line: usize, raw: &str, message: String| {
             let (start, end) = diagnostic_span(raw, &message);
             let code = diagnostic_code(&message);
@@ -581,6 +581,18 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
                 source: raw.to_string(),
                 message,
             });
+            error_count += 1;
+            if error_count >= 10 {
+                diagnostics.push(ParseDiagnostic {
+                    code: "E9999",
+                    line,
+                    column: 1,
+                    end_column: 1,
+                    source: raw.to_string(),
+                    message: "too many errors, aborting parse".into(),
+                });
+                return;
+            }
         };
 
     for (lineno, raw_line) in src.lines().enumerate() {
@@ -1296,7 +1308,6 @@ fn build_target(
                         color::RESET,
                         src
                     );
-                    std::process::exit(1);
                 }
             });
         }
