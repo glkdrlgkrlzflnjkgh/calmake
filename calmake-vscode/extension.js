@@ -45,7 +45,10 @@ function isCalmakeTask(task, command) {
 }
 
 function diagnosticsFor(document, collection) {
-  if (document.languageId !== 'calmake') return;
+  if (document.languageId !== 'calmake') {
+    window.showWarningMessage(`Calmake: Ignoring ${document.fileName} because it is not a Calmake file.`);
+    return;
+  }
   const diagnostics = [];
   const lines = document.getText().split(/\r?\n/);
   let target = undefined;
