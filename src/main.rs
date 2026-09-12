@@ -6,7 +6,10 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 mod util;
 
@@ -398,6 +401,8 @@ fn cmd_build() -> anyhow::Result<()> {
     let graph_arc = Arc::new(graph);
     let compiler_arc = Arc::new(compiler);
     let done = Arc::new(Mutex::new(HashSet::<String>::new()));
+    let skip_links = Arc::new(AtomicBool::new(false));
+    let build_errors = Arc::new(Mutex::new(Vec::<String>::new()));
 
     let num_threads = num_cpus::get().max(1);
     println!(
@@ -447,16 +452,21 @@ fn cmd_build() -> anyhow::Result<()> {
                 let cache = Arc::clone(&cache_arc);
                 let done = Arc::clone(&done);
                 let compiler = Arc::clone(&compiler_arc);
+                let skip_links = Arc::clone(&skip_links);
+                let build_errors = Arc::clone(&build_errors);
 
                 s.spawn(move |_| {
-                    if let Err(e) = build_target(&name, &graph, cache, &compiler) {
+                    if let Err(e) = build_target(&name, &graph, cache, &compiler, &skip_links) {
                         eprintln!(
                             "{}[calmake] error:{} target `{}` failed: {e}",
                             color::BRIGHT_RED,
                             color::RESET,
                             name
                         );
-                        std::process::exit(1);
+                        build_errors
+                            .lock()
+                            .unwrap()
+                            .push(format!("target `{name}`: {e}"));
                     }
                     let mut done_guard = done.lock().unwrap();
                     done_guard.insert(name);
@@ -467,6 +477,14 @@ fn cmd_build() -> anyhow::Result<()> {
 
     let cache = Arc::try_unwrap(cache_arc).unwrap().into_inner().unwrap();
     cache.save(".calmake/state/buildcache.json")?;
+
+    let build_errors = Arc::try_unwrap(build_errors).unwrap().into_inner().unwrap();
+    if !build_errors.is_empty() {
+        anyhow::bail!(
+            "build failed for {} target(s); link steps were skipped after the first failure",
+            build_errors.len()
+        );
+    }
 
     cleanup_bin(&graph_arc)?;
 
@@ -568,8 +586,7 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
     let mut current_name: Option<String> = None;
     let mut current: Option<TargetConfig> = None;
     let mut diagnostics = Vec::new();
-    let mut error_count = 0;
-    let mut report =
+    let report =
         |diagnostics: &mut Vec<ParseDiagnostic>, line: usize, raw: &str, message: String| {
             let (start, end) = diagnostic_span(raw, &message);
             let code = diagnostic_code(&message);
@@ -581,18 +598,6 @@ fn parse_config(src: &str) -> anyhow::Result<BuildConfig> {
                 source: raw.to_string(),
                 message,
             });
-            error_count += 1;
-            if error_count >= 10 {
-                diagnostics.push(ParseDiagnostic {
-                    code: "E9999",
-                    line,
-                    column: 1,
-                    end_column: 1,
-                    source: raw.to_string(),
-                    message: "too many errors, aborting parse".into(),
-                });
-                return;
-            }
         };
 
     for (lineno, raw_line) in src.lines().enumerate() {
@@ -1176,6 +1181,7 @@ fn build_target(
     graph: &BuildGraph,
     cache_arc: Arc<Mutex<BuildCache>>,
     compiler: &Compiler,
+    skip_links: &Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
     let node = graph.targets.get(name).unwrap();
 
@@ -1296,22 +1302,45 @@ fn build_target(
         }
     }
 
+    let compile_errors = Arc::new(Mutex::new(Vec::<String>::new()));
     rayon::scope(|s| {
         for (src, obj, dep) in to_compile {
             let compiler = compiler.clone();
             let node = node_clone_shallow(node);
+            let compile_errors = Arc::clone(&compile_errors);
             s.spawn(move |_| {
                 if let Err(e) = compile_one_source(&compiler, &node, &src, &obj, &dep) {
-                    eprintln!(
-                        "{}[calmake] error:{} compile failed for {:?}: {e}",
-                        color::BRIGHT_RED,
-                        color::RESET,
-                        src
-                    );
+                    compile_errors
+                        .lock()
+                        .unwrap()
+                        .push(format!("compile failed for {:?}: {e}", src));
                 }
             });
         }
     });
+
+    let compile_errors = Arc::try_unwrap(compile_errors)
+        .unwrap()
+        .into_inner()
+        .unwrap();
+    if !compile_errors.is_empty() {
+        skip_links.store(true, Ordering::SeqCst);
+        eprintln!(
+            "{}[calmake]{} {} compilation failed; skipping link for target `{}`:",
+            color::BRIGHT_RED,
+            color::RESET,
+            compile_errors.len(),
+            name
+        );
+        for error in compile_errors {
+            eprintln!("  {}", error);
+        }
+        anyhow::bail!("target `{name}` was not linked because compilation failed");
+    }
+
+    if skip_links.load(Ordering::SeqCst) {
+        anyhow::bail!("link skipped because another target failed to compile or link");
+    }
 
     let mut objects = Vec::new();
     for src in &node.sources {
@@ -1361,7 +1390,10 @@ fn build_target(
         return Ok(());
     }
 
-    link_target(compiler, node, &objects, &graph.targets)?;
+    if let Err(error) = link_target(compiler, node, &objects, &graph.targets) {
+        skip_links.store(true, Ordering::SeqCst);
+        return Err(error);
+    }
 
     cache_guard
         .targets

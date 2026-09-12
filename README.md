@@ -8,6 +8,10 @@ Commands:
 - `calmake graph` prints the target graph as Graphviz DOT.
 - `calmake init <directory>` creates a sample project.
 
+Build compilation errors are collected while the remaining source workers finish. If any
+compilation or link step fails, subsequent link steps are skipped and the build exits with
+failure after reporting the affected targets.
+
 The compilation database uses `arguments` entries and the same compiler flags as calmake's
 compile steps, so clangd can be pointed at the project root without a separate configuration.
 
