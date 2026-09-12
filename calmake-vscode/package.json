@@ -14,10 +14,9 @@
   },
   "categories": [
     "Programming Languages",
-    "Build Tools"
+    "Other"
   ],
   "activationEvents": [
-    "onLanguage:calmake",
     "workspaceContains:build.cal"
   ],
   "main": "./extension.js",
@@ -53,7 +52,7 @@
     "commands": [
       {
         "command": "calmake.build",
-        "title": "Calmake: Build"
+        "title": "Calmake: Build Project"
       },
       {
         "command": "calmake.check",
@@ -83,7 +82,7 @@
         "calmake.autoGenerateCompileCommands": {
           "type": "boolean",
           "default": true,
-          "description": "Generate compile_commands.json when build.cal changes."
+          "description": "Generate compile_commands.json when build.cal changes. For proper integration with clangd."
         }
       }
     }

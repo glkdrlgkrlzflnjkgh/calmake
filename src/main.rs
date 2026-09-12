@@ -526,7 +526,7 @@ struct ParseErrors {
 
 impl fmt::Display for ParseErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "build.cal contains {} error(s):", self.diagnostics.len())?;
+        writeln!(f, "build.cal contains {} error(s)!", self.diagnostics.len())?;
         for diagnostic in &self.diagnostics {
             writeln!(
                 f,
@@ -534,7 +534,7 @@ impl fmt::Display for ParseErrors {
                 diagnostic.line, diagnostic.column, diagnostic.message
             )?;
         }
-        Ok(())
+        Ok(()) // How is this okay???
     }
 }
 
