@@ -38,6 +38,18 @@
         "path": "./syntaxes/calmake.tmLanguage.json"
       }
     ],
+    "taskDefinitions": [
+      {
+        "type": "calmake",
+        "required": ["command"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": ["build", "compdb", "graph", "clean"]
+          }
+        }
+      }
+    ],
     "commands": [
       {
         "command": "calmake.build",

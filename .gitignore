@@ -1,2 +1,4 @@
 /target
 /.callumvcs
+*.vsix
+calmake-vscode/calmake-vscode-0.1.0.vsix
