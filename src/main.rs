@@ -13,7 +13,7 @@ mod util;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use serde::{Deserialize, Serialize};
-const COMMANDS: &[&str] = &["init", "graph", "build", "clean"];
+const COMMANDS: &[&str] = &["init", "graph", "build", "compdb", "clean"];
 
 
 mod color {
@@ -105,6 +105,26 @@ fn cmd_graph() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn cmd_compdb() -> anyhow::Result<()> {
+    let config_path = Path::new("build.cal");
+    if !config_path.exists() {
+        anyhow::bail!("build.cal not found in current directory");
+    }
+
+    let config_str = fs::read_to_string(config_path)?;
+    let config = parse_config(&config_str)?;
+    let graph = BuildGraph::from_config(&config)?;
+    let compiler = detect_compiler()?;
+
+    write_compile_commands(&graph, &compiler)?;
+    println!(
+        "{}[calmake]{} wrote compile_commands.json",
+        color::CYAN,
+        color::RESET
+    );
+    Ok(())
+}
+
 
 fn main() {
     if let Err(e) = entry() {
@@ -141,6 +161,7 @@ fn entry() -> anyhow::Result<()> {
         }
         Some("graph") => cmd_graph(),
         Some("build") => cmd_build(),
+        Some("compdb") | Some("compile_commands") => cmd_compdb(),
         Some("clean") => {
             let name = it.next();
             cmd_clean(name.as_deref())
@@ -179,7 +200,7 @@ fn entry() -> anyhow::Result<()> {
                 );
             } else {
                 anyhow::bail!(
-                    "unknown command `{other}` (valid commands: init, graph, build, clean)"
+                    "unknown command `{other}` (valid commands: init, graph, build, compdb, clean)"
                 );
             }
         }
@@ -360,6 +381,7 @@ fn cmd_build() -> anyhow::Result<()> {
     );
 
     let graph = BuildGraph::from_config(&config)?;
+    write_compile_commands(&graph, &compiler)?;
     let roots = graph.root_targets();
     if roots.is_empty() {
         anyhow::bail!("no root targets found!");
@@ -793,6 +815,13 @@ struct Compiler {
     exe: String,
 }
 
+#[derive(Debug, Serialize)]
+struct CompileCommand {
+    directory: String,
+    file: String,
+    arguments: Vec<String>,
+}
+
 ///<summary>
 /// Checks if the current operating system is Windows.
 /// </summary>
@@ -1133,6 +1162,83 @@ fn cached_import_lib_for(node: &TargetNode) -> PathBuf {
     }
     PathBuf::from(".calmake/cache/lib").join(base)
 }
+
+fn write_compile_commands(graph: &BuildGraph, compiler: &Compiler) -> anyhow::Result<()> {
+    let directory = env::current_dir()?.to_string_lossy().into_owned();
+    let mut entries = Vec::new();
+
+    for node in graph.targets.values() {
+        for src in &node.sources {
+            let obj = obj_path_for(src);
+            let command = compile_command(compiler, node, src, &obj, None);
+            let mut arguments = Vec::with_capacity(command.get_args().len() + 1);
+            arguments.push(command.get_program().to_string_lossy().into_owned());
+            arguments.extend(
+                command
+                    .get_args()
+                    .map(|arg| arg.to_string_lossy().into_owned()),
+            );
+
+            entries.push(CompileCommand {
+                directory: directory.clone(),
+                file: src.to_string_lossy().into_owned(),
+                arguments,
+            });
+        }
+    }
+
+    entries.sort_by(|a, b| a.file.cmp(&b.file));
+    let json = serde_json::to_string_pretty(&entries)?;
+    fs::write("compile_commands.json", format!("{json}\n"))?;
+    Ok(())
+}
+
+fn compile_command(
+    compiler: &Compiler,
+    node: &TargetNode,
+    src: &Path,
+    obj: &Path,
+    depfile: Option<&Path>,
+) -> Command {
+    let mut cmd = Command::new(&compiler.exe);
+
+    match compiler.kind {
+        CompilerKind::ClangCpp | CompilerKind::Gpp | CompilerKind::ClangC => {
+            if matches!(compiler.kind, CompilerKind::ClangC)
+                && matches!(node.language, Language::Cpp)
+            {
+                cmd.arg("-x").arg("c++");
+            }
+
+            match node.language {
+                Language::C => cmd.args(&node.cflags),
+                Language::Cpp => cmd.args(&node.cppflags),
+            };
+
+            if let Some(depfile) = depfile {
+                cmd.arg("-MMD").arg("-MF").arg(depfile);
+            }
+            cmd.arg("-c").arg(src).arg("-o").arg(obj);
+        }
+        CompilerKind::Cl => {
+            cmd.arg("/nologo");
+
+            match node.language {
+                Language::C => {
+                    cmd.args(&node.cflags);
+                }
+                Language::Cpp => {
+                    cmd.arg("/EHsc").args(&node.cppflags);
+                }
+            };
+
+            let fo = format!("/Fo:{}", obj.display());
+            cmd.arg("/c").arg(src).arg(fo);
+        }
+    }
+
+    cmd
+}
 /**
 <summary>
 Does what it says on the tin: compiles a single source file.
@@ -1145,81 +1251,18 @@ fn compile_one_source(
     obj: &Path,
     depfile: &Path,
 ) -> anyhow::Result<()> {
-    match compiler.kind {
-        CompilerKind::ClangCpp | CompilerKind::Gpp | CompilerKind::ClangC => {
-            let mut cmd = Command::new(&compiler.exe);
-
-            if matches!(compiler.kind, CompilerKind::ClangC)
-                && matches!(node.language, Language::Cpp)
-            {
-                cmd.arg("-x").arg("c++");
-            }
-
-            match node.language {
-                Language::C => {
-                    for flag in &node.cflags {
-                        cmd.arg(flag);
-                    }
-                }
-                Language::Cpp => {
-                    for flag in &node.cppflags {
-                        cmd.arg(flag);
-                    }
-                }
-            }
-
-            cmd.arg("-MMD");
-            cmd.arg("-MF").arg(depfile);
-
-            cmd.arg("-c").arg(src).arg("-o").arg(obj);
-
-            println!(
-                "{}[calmake]{} {}compile:{} {}",
-                color::CYAN,
-                color::RESET,
-                color::BRIGHT_BLUE,
-                color::RESET,
-                src.file_name().unwrap().to_string_lossy()
-            );
-            let status = cmd.status()?;
-            if !status.success() {
-                anyhow::bail!("compiler failed with status {status}");
-            }
-        }
-        CompilerKind::Cl => {
-            let mut cmd = Command::new("cl");
-            cmd.arg("/nologo");
-
-            match node.language {
-                Language::C => {
-                    for flag in &node.cflags {
-                        cmd.arg(flag);
-                    }
-                }
-                Language::Cpp => {
-                    cmd.arg("/EHsc");
-                    for flag in &node.cppflags {
-                        cmd.arg(flag);
-                    }
-                }
-            }
-
-            let fo = format!("/Fo:{}", obj.display());
-            cmd.arg("/c").arg(src).arg(fo);
-
-            println!(
-                "{}[calmake]{} {}compile:{} {:?}",
-                color::CYAN,
-                color::RESET,
-                color::BRIGHT_BLUE,
-                color::RESET,
-                src.file_name().unwrap().to_string_lossy()
-            );
-            let status = cmd.status()?;
-            if !status.success() {
-                anyhow::bail!("cl failed with status {status}");
-            }
-        }
+    let mut cmd = compile_command(compiler, node, src, obj, Some(depfile));
+    println!(
+        "{}[calmake]{} {}compile:{} {}",
+        color::CYAN,
+        color::RESET,
+        color::BRIGHT_BLUE,
+        color::RESET,
+        src.file_name().unwrap().to_string_lossy()
+    );
+    let status = cmd.status()?;
+    if !status.success() {
+        anyhow::bail!("compiler failed with status {status}");
     }
 
     Ok(())

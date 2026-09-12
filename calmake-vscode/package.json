@@ -1,0 +1,78 @@
+{
+  "name": "calmake-vscode",
+  "displayName": "Calmake",
+  "description": "VS Code support for the calmake build system.",
+  "version": "0.1.0",
+  "publisher": "calmake",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/glkdrlgkrlzflnjkgh/calmake"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Build Tools"
+  ],
+  "activationEvents": [
+    "onLanguage:calmake",
+    "workspaceContains:build.cal"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "calmake",
+        "aliases": ["Calmake", "calmake"],
+        "extensions": [".cal"],
+        "filenames": ["build.cal"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "calmake",
+        "scopeName": "source.calmake",
+        "path": "./syntaxes/calmake.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "calmake.build",
+        "title": "Calmake: Build"
+      },
+      {
+        "command": "calmake.generateCompileCommands",
+        "title": "Calmake: Generate compile_commands.json"
+      },
+      {
+        "command": "calmake.graph",
+        "title": "Calmake: Show Target Graph"
+      },
+      {
+        "command": "calmake.clean",
+        "title": "Calmake: Clean"
+      }
+    ],
+    "configuration": {
+      "title": "Calmake",
+      "properties": {
+        "calmake.executable": {
+          "type": "string",
+          "default": "calmake",
+          "description": "Path to the calmake executable."
+        },
+        "calmake.autoGenerateCompileCommands": {
+          "type": "boolean",
+          "default": true,
+          "description": "Generate compile_commands.json when build.cal changes."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package"
+  }
+}

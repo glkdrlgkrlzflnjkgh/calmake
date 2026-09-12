@@ -1,0 +1,45 @@
+{
+  "scopeName": "source.calmake",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#targets" },
+    { "include": "#properties" },
+    { "include": "#values" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.number-sign.calmake", "match": "#.*$" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.double.calmake", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.calmake", "match": "\\\\." }] }
+      ]
+    },
+    "targets": {
+      "patterns": [
+        {
+          "match": "\\b(target)\\s+([A-Za-z_][A-Za-z0-9_-]*)",
+          "captures": {
+            "1": { "name": "keyword.control.target.calmake" },
+            "2": { "name": "entity.name.function.target.calmake" }
+          }
+        }
+      ]
+    },
+    "properties": {
+      "patterns": [
+        { "name": "support.type.property-name.calmake", "match": "\\b(kind|language|sources|deps|output|cflags|cppflags|ldflags)\\b(?=\\s*=)" }
+      ]
+    },
+    "values": {
+      "patterns": [
+        { "name": "constant.language.calmake", "match": "\\b(exe|staticlib|sharedlib|c|cpp)\\b" },
+        { "name": "keyword.operator.assignment.calmake", "match": "=" },
+        { "name": "punctuation.definition.list.begin.calmake", "match": "[\\[\\]{}(),]" }
+      ]
+    }
+  }
+}
