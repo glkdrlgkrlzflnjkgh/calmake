@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.102"
-blake3 = "1.8.4"
-cc = "1.2.65"
+anyhow = "1.0.103"
+blake3 = "1.8.7"
+cc = "1.4.7"
 fuzzy-matcher = "0.3.7"
 num_cpus = "1.17.0"
 rayon = "1.11.0"
-serde = { version = "1.0.228", features = ["derive", "alloc"] }
-serde_json = "1.0.150"
-toml = "1.1.1"
+serde = { version = "1.0.229", features = ["derive", "alloc"] }
+serde_json = "1.0.151"
+toml = "1.1.6+spec-1.1.0"
