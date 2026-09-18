@@ -1648,6 +1648,7 @@ fn link_target(
                 color::YELLOW,
                 color::RESET
             );
+            eprintln!("NOTE: If this warning appeared before a build failure, it was probably caused by MSCV shitfucking calmake's assumptions. DO NOT report a bug on instances where this message appears!");
             match node.kind {
                 TargetKind::Staticlib => {
                     let mut cmd = Command::new("lib");
