@@ -1079,6 +1079,8 @@ fn is_windows() -> bool {
     cfg!(target_os = "windows")
 }
 
+
+
 fn detect_compiler() -> anyhow::Result<Compiler> {
     let candidates: Vec<(&str, CompilerKind)> = if is_windows() {
         vec![
@@ -1089,6 +1091,7 @@ fn detect_compiler() -> anyhow::Result<Compiler> {
         ]
     } else {
         vec![
+            // No need to check for "cl" on non-Windows platforms, cl is proprietary garbage for Windows only... and it sucks butts.... :D
             ("clang++", CompilerKind::ClangCpp),
             ("clang", CompilerKind::ClangC),
             ("g++", CompilerKind::Gpp),
