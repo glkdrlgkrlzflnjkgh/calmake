@@ -441,8 +441,9 @@ fn cmd_build() -> anyhow::Result<()> {
         }
 
         if to_run.is_empty() {
+            //... Fuck. There goes my free time! - Litterally any maintainer if they got a bug report where this happened.
             anyhow::bail!(
-                "BUG!!!! deadlock or cycle detected even after cycle detector!!!!! (no runnable targets but not all done!!!)"
+                "aieee! Nothing more to run but targets remain?\nIn simple terms: calmake has successfully gaslighted itself! :D\nPS: Please report this as a bug!"
             );
         }
 
@@ -1111,7 +1112,8 @@ fn detect_compiler() -> anyhow::Result<Compiler> {
         "no supported compiler found (tried clang++, clang, g++, cl). \
          Install LLVM/Clang, MSVC Build Tools, or MinGW and ensure the compiler is in your PATH. \
          Verbose mode (-v) can be used to see which compilers were checked. \
-         Also, ensure that the compiler is callable from the command line (e.g., `clang++ --version` should work).
+         Also, ensure that the compiler is callable from the command line (e.g., `clang++ --version` should work). \
+         NB! Do **NOT** use MSCV with calmake! Attempting to do so may cause **SEVERE** problems!!
          " 
     );
 }
@@ -1280,7 +1282,7 @@ fn build_target(
 
     if !any_source_changed && old_target_cache.target_hash == meta_hash && output_exists {
         println!(
-            "{}[calmake]{} {} {}is up to date!{} ",
+            "{}[calmake]{} {} {}is clean!{} ",
             color::CYAN,
             color::RESET,
             name,
@@ -1293,7 +1295,7 @@ fn build_target(
         return Ok(());
     }
     println!(
-        "{}[calmake]{} {} needs to be rebuilt!",
+        "{}[calmake]{} {} is dirty!",
         color::CYAN,
         color::RESET,
         name
@@ -1329,16 +1331,14 @@ fn build_target(
     if !compile_errors.is_empty() {
         skip_links.store(true, Ordering::SeqCst);
         eprintln!(
-            "{}[calmake]{} {} compilation failed; skipping link for target `{}`:",
+            "{}[calmake]{} {} compilation failed; skipping link!",
             color::BRIGHT_RED,
             color::RESET,
-            compile_errors.len(),
-            name
+            compile_errors.len()
         );
         for error in compile_errors {
             eprintln!("  {}", error);
         }
-        anyhow::bail!("target `{name}` was not linked because compilation failed");
     }
 
     if skip_links.load(Ordering::SeqCst) {
@@ -1542,7 +1542,7 @@ fn compile_one_source(
     );
     let status = cmd.status()?;
     if !status.success() {
-        anyhow::bail!("compiler failed with status {status}");
+        anyhow::bail!("compiler FAILED with status {status}!");
     }
 
     Ok(())
