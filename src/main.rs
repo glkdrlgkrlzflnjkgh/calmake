@@ -1316,7 +1316,7 @@ fn build_target(
                     compile_errors
                         .lock()
                         .unwrap()
-                        .push(format!("compile failed for {:?}: {e}", src));
+                        .push(format!("compile failed for {:?}: {e}!", src));
                 }
             });
         }
