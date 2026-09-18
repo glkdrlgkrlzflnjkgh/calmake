@@ -372,7 +372,7 @@ fn cmd_build() -> anyhow::Result<()> {
 
     let compiler = detect_compiler()?;
     println!(
-        "{}[calmake]{} using compiler: {}{}{}",
+        "{}[calmake]{} using compiler {}{}{}",
         color::CYAN,
         color::RESET,
         color::BRIGHT_GREEN,
@@ -384,7 +384,7 @@ fn cmd_build() -> anyhow::Result<()> {
     write_compile_commands(&graph, &compiler)?;
     let roots = graph.root_targets();
     if roots.is_empty() {
-        anyhow::bail!("no root targets found!");
+        anyhow::bail!("no root targets found! (did you forget to define any targets?)");
     }
     println!(
         "{}[calmake]{} roots: {:?}",
@@ -459,7 +459,7 @@ fn cmd_build() -> anyhow::Result<()> {
                 s.spawn(move |_| {
                     if let Err(e) = build_target(&name, &graph, cache, &compiler, &skip_links) {
                         eprintln!(
-                            "{}[calmake] error:{} target `{}` failed: {e}",
+                            "{}[calmake] error:{} target `{}` failed!",
                             color::BRIGHT_RED,
                             color::RESET,
                             name
@@ -1314,11 +1314,11 @@ fn build_target(
             let node = node_clone_shallow(node);
             let compile_errors = Arc::clone(&compile_errors);
             s.spawn(move |_| {
-                if let Err(e) = compile_one_source(&compiler, &node, &src, &obj, &dep) {
+                if let Err(_e) = compile_one_source(&compiler, &node, &src, &obj, &dep) {
                     compile_errors
                         .lock()
                         .unwrap()
-                        .push(format!("compile failed for {:?}: {e}!", src));
+                        .push(format!(""));
                 }
             });
         }
@@ -1330,19 +1330,13 @@ fn build_target(
         .unwrap();
     if !compile_errors.is_empty() {
         skip_links.store(true, Ordering::SeqCst);
-        eprintln!(
-            "{}[calmake]{} {} compilation failed; skipping link!",
-            color::BRIGHT_RED,
-            color::RESET,
-            compile_errors.len()
-        );
         for error in compile_errors {
             eprintln!("  {}", error);
         }
     }
 
     if skip_links.load(Ordering::SeqCst) {
-        anyhow::bail!("link skipped because another target failed to compile or link");
+        anyhow::bail!("");
     }
 
     let mut objects = Vec::new();
@@ -1542,7 +1536,7 @@ fn compile_one_source(
     );
     let status = cmd.status()?;
     if !status.success() {
-        anyhow::bail!("compiler FAILED with status {status}!");
+        anyhow::bail!("[calmake]compiler FAILED with status {status}!");
     }
 
     Ok(())
