@@ -1759,6 +1759,7 @@ fn normalize(root: &Path, p: &Path) -> PathBuf {
 mod tests {
     use super::parse_config;
 
+
     #[test]
     fn parser_reports_multiple_errors() {
         let source = r#"
