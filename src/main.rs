@@ -1679,7 +1679,7 @@ fn parse_depfile(path: &Path) -> anyhow::Result<Vec<PathBuf>> {
 }
 
 fn hash_file(path: &Path) -> anyhow::Result<blake3::Hash> {
-	vprintln!("Hashing a file called {path:?}!");
+    vprintln!("Hashing a file called {path:?}!");
     let mut f = File::open(path).map_err(|e| anyhow::anyhow!("failed to open {:?}: {e}", path))?;
     let mut hasher = blake3::Hasher::new();
     let mut buf = [0u8; 8192];
