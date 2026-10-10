@@ -1342,7 +1342,7 @@ fn build_target(
     }
 
     if skip_links.load(Ordering::SeqCst) {
-        anyhow::bail!("");
+        anyhow::bail!(""); // i bail because your code didnt compile. leave me alone.
     }
 
     let mut objects = Vec::new();
