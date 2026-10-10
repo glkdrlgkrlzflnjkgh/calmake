@@ -1,5 +1,5 @@
 use crate::Command;
-
+use crate::color;
 pub fn comparenums(a: i32, b: i32) -> anyhow::Result<bool> {
     return Ok(a == b);
 }
@@ -17,3 +17,8 @@ pub fn pretty_cmd(cmd: &Command) -> String {
 
     s
 }
+
+pub fn impossible_state_bail(message: &str) -> anyhow::Result<()> {
+    anyhow::bail!("{}Impossible state reached!!!{} \"{}\" This is a BUG! OPEN AN ISSUE ASAP!!", color::RED, color::RESET, message);
+}
+

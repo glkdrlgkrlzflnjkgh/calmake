@@ -16,6 +16,8 @@ mod util;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use serde::{Deserialize, Serialize};
+
+use crate::util::impossible_state_bail;
 const COMMANDS: &[&str] = &["init", "graph", "build", "check", "compdb", "clean"];
 
 mod color {
@@ -437,9 +439,7 @@ fn cmd_build() -> anyhow::Result<()> {
 
         if to_run.is_empty() {
             //... Fuck. There goes my free time! - Litterally any maintainer if they got a bug report where this happened.
-            anyhow::bail!(
-                "AIEEEE! This should never happen! No runnable targets were found, but we're not done yet! This is a bug! Report this!!!!"
-            );
+			impossible_state_bail("aieee! No runnable targets but we're not done yet!")?;
         }
 
         rayon::scope(|s| {
