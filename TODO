@@ -1,2 +1,2 @@
-1. Add "similar command: whatever" to the argument parser via fuzzy-matcher. Specifically its Skim module.
+1. Add "similar command: whatever" to the argument parser via fuzzy-matcher. Specifically its Skim module. - DONE!
 2. prettier printing to make it more consistent? - DONE!
