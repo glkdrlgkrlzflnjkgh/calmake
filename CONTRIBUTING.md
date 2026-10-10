@@ -9,7 +9,7 @@ the following behaviors are prohibited.
 1. Harassment
 2. Bullying
 3. Discrimination
-4. Being generally disrespectful to other contributors on the repository.
+4. Being generally disrespectful to other contributors on the repository. <br>
 *NB! This list is non-exhaustive! Use common sense! If you wouldn't do it in real life, don't do it here!*
 ## NO TOLERANCE
 Like most- if not all real-world public spaces, the Calmake Repository has no tolerance to abuse, <br>
