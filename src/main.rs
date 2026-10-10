@@ -467,7 +467,7 @@ fn cmd_build() -> anyhow::Result<()> {
                     }
 					let mut done_guard = match done.lock() {
 						Ok(guard) => guard,
-						Err(poisoned) => {
+						Err(_poisoned) => {
 							// Fatal internal error — do NOT attempt recovery
 							eprintln!(
 								"{}[calmake] internal error:{} mutex poisoned while updating done list",
