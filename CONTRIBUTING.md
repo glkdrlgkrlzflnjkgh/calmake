@@ -15,7 +15,7 @@ As calmake is a build system, stability is vital, and because ALOT of AI generat
 (and also because AI companies are sending out their dumb little scrapers and using FOSS work without consent)
 AI generated PRs are prohibited.
 ## ON THE USAGE OF THE PANIC!() MACRO
-Calmake runs builds in parallel via a system of workers.
-Because of this, a panic!() inside of *Worker Code* does **NOT** behave like a normal error- it will *poison* the shared state,
-which could cause serious bugs. Even though the code explicitly gaurds against panics in a worker thread, do **NOT** take that protection for granted in your PR!
+Calmake runs builds in parallel via a system of workers. <br>
+Because of this, a panic!() inside of *Worker Code* does **NOT** behave like a normal error- it will *poison* the shared state, <br>
+which could cause serious bugs.<br> Even though the code explicitly gaurds against panics in a worker thread, do **NOT** take that protection for granted in your PR! <br>
 It is required that you use anyhow::bail!() or return Err() or the ? operator instead of panic!() in *Worker Code!*
