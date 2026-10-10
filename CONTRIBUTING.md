@@ -23,3 +23,12 @@ Calmake runs builds in parallel via a system of workers. <br>
 Because of this, a panic!() inside of *Worker Code* does **NOT** behave like a normal error- it will *poison* the shared state, <br>
 which could cause serious bugs.<br> Even though the code explicitly guards against panics in a worker thread, do **NOT** take that protection for granted in your PR! <br>
 It is required that you use anyhow::bail!() or return Err() or the ? operator instead of panic!() in *Worker Code!*
+
+## SCHEDULER INVARIANTS
+Calmake's scheduler relies on strict ordering and some shared state, <br>
+and as such has several invariants. <br>
+1. A target must NOT run until its dependencies are marked "Done"
+2. A worker thread must NOT panic and should handle errors gracefully, while still reporting that something went wrong.
+3. The DAG must NOT be mutated after it is computed, as if it does many classes of bugs could arise.
+<br>
+If code in a PR is found to violate one or more of these invariants, it will not be merged until they are corrected.
