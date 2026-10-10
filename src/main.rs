@@ -1121,12 +1121,9 @@ fn detect_compiler() -> anyhow::Result<Compiler> {
     }
 
     anyhow::bail!(
-        "no supported compiler found (tried clang++, clang, g++, cl). \
-         Install LLVM/Clang, MSVC Build Tools, or MinGW and ensure the compiler is in your PATH. \
-         Verbose mode (-v) can be used to see which compilers were checked. \
-         Also, ensure that the compiler is callable from the command line (e.g., `clang++ --version` should work). \
-         NB! Do **NOT** use MSCV with calmake! Attempting to do so may cause **SEVERE** problems!!
-         " 
+        "no supported compiler found (tried clang++, clang, g++) \
+		PS: MSCV support got removed- as MSCV breaks calmake... because MSCV is actual garbage and is also made by microso- I mean microslop.
+        " 
     );
 }
 
