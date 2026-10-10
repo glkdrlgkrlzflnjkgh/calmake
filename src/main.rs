@@ -226,10 +226,11 @@ fn cmd_clean(name: Option<&str>) -> anyhow::Result<()> {
         color::RESET,
         project_name
     );
-	println!("{}[calmake]{} removing bin and calmake cache...",
-		color::CYAN,
-		color::RESET
-	);
+    println!(
+        "{}[calmake]{} removing bin and calmake cache...",
+        color::CYAN,
+        color::RESET
+    );
     fs::remove_dir_all(root.join("bin"))?;
     fs::remove_dir_all(root.join(".calmake"))?;
 
@@ -439,7 +440,7 @@ fn cmd_build() -> anyhow::Result<()> {
 
         if to_run.is_empty() {
             //... Fuck. There goes my free time! - Litterally any maintainer if they got a bug report where this happened.
-			impossible_state_bail("aieee! No runnable targets but we're not done yet!")?;
+            impossible_state_bail("aieee! No runnable targets but we're not done yet!")?;
         }
 
         rayon::scope(|s| {
@@ -464,7 +465,25 @@ fn cmd_build() -> anyhow::Result<()> {
                             .unwrap()
                             .push(format!("target `{name}`: {e}"));
                     }
-                    let mut done_guard = done.lock().unwrap();
+					let mut done_guard = match done.lock() {
+						Ok(guard) => guard,
+						Err(poisoned) => {
+							// Fatal internal error — do NOT attempt recovery
+							eprintln!(
+								"{}[calmake] internal error:{} mutex poisoned while updating done list",
+								color::BRIGHT_RED,
+								color::RESET
+							);
+
+							// Mark the build as failed so the scheduler stops cleanly
+							build_errors
+								.lock()
+								.unwrap()
+								.push("internal error: mutex poisoned".to_string());
+
+							return; // stop this worker thread immediately
+						}
+					};
                     done_guard.insert(name);
                 });
             }
@@ -1017,7 +1036,9 @@ impl BuildGraph {
         }
 
         if order.len() != self.targets.len() {
-            anyhow::bail!("Cyclic dependency detected! (e.g, target A depends on B, and B depends on A)");
+            anyhow::bail!(
+                "Cyclic dependency detected! (e.g, target A depends on B, and B depends on A)"
+            );
         }
 
         Ok(order)
@@ -1074,8 +1095,6 @@ struct CompileCommand {
 fn is_windows() -> bool {
     cfg!(target_os = "windows")
 }
-
-
 
 fn detect_compiler() -> anyhow::Result<Compiler> {
     let candidates: Vec<(&str, CompilerKind)> = if is_windows() {
@@ -1310,10 +1329,7 @@ fn build_target(
             let compile_errors = Arc::clone(&compile_errors);
             s.spawn(move |_| {
                 if let Err(_e) = compile_one_source(&compiler, &node, &src, &obj, &dep) {
-                    compile_errors
-                        .lock()
-                        .unwrap()
-                        .push(format!(""));
+                    compile_errors.lock().unwrap().push(format!(""));
                 }
             });
         }
@@ -1637,7 +1653,9 @@ fn link_target(
                 color::YELLOW,
                 color::RESET
             );
-            eprintln!("NOTE: If this warning appeared before a build failure, it was probably caused by MSCV shitfucking calmake's assumptions. DO NOT report a bug on instances where this message appears!");
+            eprintln!(
+                "NOTE: If this warning appeared before a build failure, it was probably caused by MSCV shitfucking calmake's assumptions. DO NOT report a bug on instances where this message appears!"
+            );
             match node.kind {
                 TargetKind::Staticlib => {
                     let mut cmd = Command::new("lib");
