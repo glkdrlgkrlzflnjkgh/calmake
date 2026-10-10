@@ -213,15 +213,6 @@ fn entry() -> anyhow::Result<()> {
 
 fn cmd_clean(name: Option<&str>) -> anyhow::Result<()> {
     let project_name = name.unwrap_or("./");
-    if project_name == "./" {
-        println!(
-            "{}[calmake]{} WARNING: cleaning current directory!{}{}",
-            color::CYAN,
-            color::RESET,
-            color::BRIGHT_YELLOW,
-            color::RESET
-        );
-    }
     let root = Path::new(project_name);
     if !root.exists() {
         anyhow::bail!("directory `{project_name}` does not exist");
@@ -233,6 +224,10 @@ fn cmd_clean(name: Option<&str>) -> anyhow::Result<()> {
         color::RESET,
         project_name
     );
+	println!("{}[calmake]{} removing bin and calmake cache...",
+		color::CYAN,
+		color::RESET
+	);
     fs::remove_dir_all(root.join("bin"))?;
     fs::remove_dir_all(root.join(".calmake"))?;
 
@@ -348,7 +343,7 @@ void libcallum_hello() {
     println!();
     println!("Next steps:");
     println!("  cd {project_name}");
-    println!("  calmake");
+    println!("  calmake build");
 
     Ok(())
 }
@@ -386,7 +381,7 @@ fn cmd_build() -> anyhow::Result<()> {
     if roots.is_empty() {
         anyhow::bail!("no root targets found! (did you forget to define any targets?)");
     }
-    println!(
+    vprintln!(
         "{}[calmake]{} roots: {:?}",
         color::CYAN,
         color::RESET,
@@ -443,7 +438,7 @@ fn cmd_build() -> anyhow::Result<()> {
         if to_run.is_empty() {
             //... Fuck. There goes my free time! - Litterally any maintainer if they got a bug report where this happened.
             anyhow::bail!(
-                "aieee! Nothing more to run but targets remain?\nIn simple terms: calmake has successfully gaslighted itself! :D\nPS: Please report this as a bug!"
+                "AIEEEE! This should never happen! No runnable targets were found, but we're not done yet! This is a bug! Report this!!!!"
             );
         }
 
@@ -1022,7 +1017,7 @@ impl BuildGraph {
         }
 
         if order.len() != self.targets.len() {
-            anyhow::bail!("Cyclic dependency detected!");
+            anyhow::bail!("Cyclic dependency detected! (e.g, target A depends on B, and B depends on A)");
         }
 
         Ok(order)
