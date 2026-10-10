@@ -1071,7 +1071,6 @@ enum CompilerKind {
     ClangCpp,
     ClangC,
     Gpp,
-    Cl,
 }
 ///<summary>
 /// The Compiler struct represents a detected compiler, including its kind and the executable name.
@@ -1102,7 +1101,6 @@ fn detect_compiler() -> anyhow::Result<Compiler> {
             ("clang++", CompilerKind::ClangCpp),
             ("clang", CompilerKind::ClangC),
             ("g++", CompilerKind::Gpp),
-            ("cl", CompilerKind::Cl),
         ]
     } else {
         vec![
@@ -1505,21 +1503,6 @@ fn compile_command(
             }
             cmd.arg("-c").arg(src).arg("-o").arg(obj);
         }
-        CompilerKind::Cl => {
-            cmd.arg("/nologo");
-
-            match node.language {
-                Language::C => {
-                    cmd.args(&node.cflags);
-                }
-                Language::Cpp => {
-                    cmd.arg("/EHsc").args(&node.cppflags);
-                }
-            };
-
-            let fo = format!("/Fo:{}", obj.display());
-            cmd.arg("/c").arg(src).arg(fo);
-        }
     }
 
     cmd
@@ -1645,106 +1628,6 @@ fn link_target(
                 }
             }
         },
-        CompilerKind::Cl => {
-            eprintln!(
-                "{}[calmake]{}{}WARNING: We are using MSCV to compile! this is not recommended!!!{}",
-                color::CYAN,
-                color::RESET,
-                color::YELLOW,
-                color::RESET
-            );
-            eprintln!(
-                "NOTE: If this warning appeared before a build failure, it was probably caused by MSCV shitfucking calmake's assumptions. DO NOT report a bug on instances where this message appears!"
-            );
-            match node.kind {
-                TargetKind::Staticlib => {
-                    let mut cmd = Command::new("lib");
-                    cmd.arg("/nologo");
-                    let out = format!("/OUT:{}", node.output.display());
-                    cmd.arg(out);
-                    for obj in objects {
-                        cmd.arg(obj);
-                    }
-
-                    println!(
-                        "{}[calmake]{} {}archive:{} {}",
-                        color::CYAN,
-                        color::RESET,
-                        color::BRIGHT_MAGENTA,
-                        color::RESET,
-                        node.name
-                    );
-                    let status = cmd.status()?;
-                    if !status.success() {
-                        anyhow::bail!("lib.exe failed with status {status}");
-                    }
-                }
-                _ => {
-                    let mut cmd = Command::new("cl");
-                    cmd.arg("/nologo");
-
-                    for obj in objects {
-                        cmd.arg(obj);
-                    }
-
-                    for dep in &node.deps {
-                        let dep_node = all_targets.get(dep).unwrap();
-                        if dep_node.kind == TargetKind::Sharedlib {
-                            let cached_lib = cached_import_lib_for(dep_node);
-                            cmd.arg(&cached_lib);
-                        } else {
-                            cmd.arg(&dep_node.output);
-                        }
-                    }
-
-                    for flag in &node.ldflags {
-                        cmd.arg(flag);
-                    }
-
-                    match node.kind {
-                        TargetKind::Exe => {
-                            let fe = format!("/Fe:{}", node.output.display());
-                            cmd.arg(fe);
-                        }
-                        TargetKind::Sharedlib => {
-                            let fe = format!("/Fe:{}", node.output.display());
-                            cmd.arg("/LD").arg(fe);
-                        }
-                        TargetKind::Staticlib => unreachable!(),
-                    }
-
-                    println!(
-                        "{}[calmake]{} {}link:{} {:?}",
-                        color::CYAN,
-                        color::RESET,
-                        color::BRIGHT_MAGENTA,
-                        color::RESET,
-                        node.name
-                    );
-                    let status = cmd.status()?;
-                    if !status.success() {
-                        anyhow::bail!("cl link failed with status {status}");
-                    }
-
-                    if node.kind == TargetKind::Sharedlib {
-                        let dll_path = node.output.to_string_lossy().to_string();
-                        let default_lib = dll_path.replace(".dll", ".lib");
-                        let default_lib_path = PathBuf::from(&default_lib);
-                        let cached_lib = cached_import_lib_for(node);
-
-                        if default_lib_path.exists() {
-                            fs::create_dir_all(cached_lib.parent().unwrap())?;
-                            fs::copy(&default_lib_path, &cached_lib)?;
-                            vprintln!(
-                                "cached import lib {:?} -> {:?}",
-                                default_lib_path,
-                                cached_lib
-                            );
-                        }
-                    }
-                }
-            }
-        }
     }
 
     Ok(())
