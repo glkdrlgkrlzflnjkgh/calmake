@@ -935,7 +935,7 @@ impl BuildGraph {
                 }
             }
             if sources.is_empty() {
-                anyhow::bail!("target `{name}` has no sources after discovery");
+                anyhow::bail!("target `{name}` has no sources after discovery!");
             }
 
             let output = PathBuf::from(&t.output);
@@ -1277,7 +1277,7 @@ fn build_target(
 
     if !any_source_changed && old_target_cache.target_hash == meta_hash && output_exists {
         println!(
-            "{}[calmake]{} {} {}is clean!{} ",
+            "{}[calmake]{} {} {}is up to date!{} ",
             color::CYAN,
             color::RESET,
             name,
@@ -1290,7 +1290,7 @@ fn build_target(
         return Ok(());
     }
     println!(
-        "{}[calmake]{} {} is dirty!",
+        "{}[calmake]{} {} has changed, rebuilding!",
         color::CYAN,
         color::RESET,
         name
